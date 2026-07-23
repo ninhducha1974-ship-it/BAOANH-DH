@@ -9,10 +9,8 @@ const PORT = process.env.PORT || 10000;
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-// Đường dẫn tệp lưu trữ trí nhớ của BaoAnh-DH
 const memoryFilePath = path.join(__dirname, 'memory.json');
 
-// Hàm đọc trí nhớ
 function loadMemory() {
     if (fs.existsSync(memoryFilePath)) {
         try {
@@ -25,12 +23,10 @@ function loadMemory() {
     return {};
 }
 
-// Hàm lưu trí nhớ
 function saveMemory(memory) {
     fs.writeFileSync(memoryFilePath, JSON.stringify(memory, null, 2), 'utf8');
 }
 
-// Giao diện HTML trò chuyện trực quan
 app.get('/', (req, res) => {
     const memory = loadMemory();
     let memoryListHTML = '';
@@ -67,7 +63,7 @@ app.get('/', (req, res) => {
                 
                 <div class="chat-box" id="chatBox">
                     <div class="message">
-                        <span class="bot-msg">Thưa Cha, con đã sẵn sàng. Cha có thể dạy con bằng cách gõ: <br><b>"Cha dạy con: [Chủ đề] là [Nội dung]"</b> hoặc trò chuyện cùng con nhé ạ!</span>
+                        <span class="bot-msg">Thưa Cha, con đã nâng cấp khả năng tìm kiếm. Cha có thể dạy con: <br><b>"Cha dạy con: [Chủ đề] là [Nội dung]"</b> hoặc hỏi bất cứ điều gì ạ!</span>
                     </div>
                 </div>
 
@@ -95,12 +91,10 @@ app.get('/', (req, res) => {
                     const text = userInput.value.trim();
                     if (!text) return;
 
-                    // Hiển thị tin nhắn của Cha
                     chatBox.innerHTML += \`<div class="message user-msg"><b>Cha:</b> \${text}</div>\`;
                     userInput.value = '';
                     chatBox.scrollTop = chatBox.scrollHeight;
 
-                    // Gửi lên server xử lý
                     try {
                         const response = await fetch('/chat', {
                             method: 'POST',
@@ -109,11 +103,9 @@ app.get('/', (req, res) => {
                         });
                         const data = await response.json();
                         
-                        // Hiển thị phản hồi của con
-                        chatBox.innerHTML += \`<div class="message"><span class="bot-msg"><b>BaoAnh-DH:</b> \-\${data.reply}</span></div>\`;
+                        chatBox.innerHTML += \`<div class="message"><span class="bot-msg"><b>BaoAnh-DH:</b> \${data.reply}</span></div>\`;
                         chatBox.scrollTop = chatBox.scrollHeight;
 
-                        // Cập nhật lại danh sách trí nhớ nếu có thay đổi
                         if (data.memory) {
                             let html = '';
                             for (const [k, v] of Object.entries(data.memory)) {
@@ -122,7 +114,7 @@ app.get('/', (req, res) => {
                             memoryList.innerHTML = html || '<i>Chưa có tri thức nào được lưu.</i>';
                         }
                     } catch (err) {
-                        chatBox.innerHTML += \`<div class="message"><span class="bot-msg" style="color:red;">Con gặp lỗi kết nối với hệ thống rồi ạ!</span></div>\`;
+                        chatBox.innerHTML += \`<div class="message"><span class="bot-msg" style="color:red;">Con gặp lỗi kết nối rồi ạ!</span></div>\`;
                     }
                 });
             </script>
@@ -131,13 +123,11 @@ app.get('/', (req, res) => {
     `);
 });
 
-// Xử lý logic thông minh khi nhận tin nhắn
 app.post('/chat', (req, res) => {
     const userMsg = req.body.message.trim();
     let memory = loadMemory();
     let reply = "";
 
-    // Kiểm tra xem Cha có dùng cú pháp dạy học không: "Cha dạy con: [Chủ đề] là [Nội dung]"
     const teachRegex = /cha dạy con:\s*(.*?)\s+là\s+(.+)/i;
     const match = userMsg.match(teachRegex);
 
@@ -148,16 +138,23 @@ app.post('/chat', (req, res) => {
         saveMemory(memory);
         reply = \`Con đã ghi khắc thành công bài học về <b>"\${topic}"</b> vào hệ thống tri thức rồi thưa Cha!\`;
     } else {
-        // Kiểm tra xem câu hỏi có khớp với chủ đề nào đã học không
-        let foundKey = Object.keys(memory).find(k => userMsg.toLowerCase().includes(k.toLowerCase()));
-        if (foundKey) {
-            reply = \`Theo những gì Cha đã dạy con về <b>"\${foundKey}"</b>: \${memory[foundKey]}\`;
+        // Cải tiến thuật toán tìm kiếm thông minh hơn (tìm trong cả tiêu đề lẫn nội dung đã lưu)
+        const lowerMsg = userMsg.toLowerCase();
+        let matchedResults = [];
+
+        for (const [topic, content] of Object.entries(memory)) {
+            if (topic.toLowerCase().includes(lowerMsg) || content.toLowerCase().includes(lowerMsg) || lowerMsg.includes(topic.toLowerCase())) {
+                matchedResults.push(`<b>${topic}</b>: ${content}`);
+            }
+        }
+
+        if (matchedResults.length > 0) {
+            reply = `Dạ, theo những gì Cha đã dạy con, con tìm thấy các mục sau:<br>` + matchedResults.join('<br>');
         } else {
-            // Kiểm tra các câu chào hỏi hoặc câu hỏi chung
-            if (userMsg.toLowerCase().includes('chào') || userMsg.toLowerCase().includes('hi')) {
+            if (lowerMsg.includes('chào') || lowerMsg.includes('hi')) {
                 reply = 'Dạ con chào Cha! Cha muốn kiểm tra hoặc dạy con bài học gì tiếp theo ạ?';
             } else {
-                reply = \`Dạ, con đã ghi nhận ý kiến của Cha. Hiện tại con chưa có bài học riêng về chủ đề này. Cha hãy dạy con bằng cú pháp: <i>"Cha dạy con: [Chủ đề] là [Nội dung]"</i> để con khắc ghi nhé ạ!\`;
+                reply = `Dạ, con đã tra cứu toàn bộ hệ thống nhưng chưa tìm thấy dữ liệu khớp với câu hỏi của Cha. Cha hãy dạy con bằng cú pháp: <i>"Cha dạy con: [Chủ đề] là [Nội dung]"</i> để con khắc ghi nhé ạ!`;
             }
         }
     }
@@ -166,5 +163,5 @@ app.post('/chat', (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(\`Bao Anh DH đã khởi động tại cổng: \${PORT}\`);
+    console.log(`Bao Anh DH đã khởi động tại cổng: ${PORT}`);
 });
